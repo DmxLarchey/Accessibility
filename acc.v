@@ -24,7 +24,7 @@ Require Import Utf8.
 
 Section accessibility.
 
-  (* Symbols : → ¬ ∃ ∧ ∀  *)
+  (* Symbols : ≺ ∀ ∃ → ¬ ∧ *)
 
   Variable (X : Type) (R : X → X → Prop).
 
@@ -92,9 +92,9 @@ Section accessibility.
      they are too weak (typically with mutual or nested inductive
      types).
 
-     We block the generation of recursors/eliminations
-     rules with the following command, because we *do want* 
-     to study them by hand *)
+     We block the generation of recursors/elimination rules 
+     with the following command, because we *do want* to study 
+     them by hand *)
 
   Unset Elimination Schemes.
 
@@ -214,7 +214,7 @@ Section accessibility.
 
     Fixpoint acc_i_drect_code x (ax : acc_i x) { struct ax } : P x ax :=
       match ax with
-      | acc_i_intro _ hx => Pclosed _ hx (λ y hy, acc_i_drect_code y (hx y hy))
+      | acc_i_intro _ hx => Pclosed x hx (λ y hy, acc_i_drect_code y (hx y hy))
       end.
 
     Definition acc_i_drect := acc_i_drect_code.
@@ -281,8 +281,9 @@ Arguments acc_i {X} R x.
 
 (** Constructive well foundedness and transfinite recursion *)
 
-(* A well-founded relation is where all member are accessible *)
-Definition wf {X} (R : X → X → Prop) := ∀x ,acc_i R x.
+(* A well-founded relation is where all member are accessible 
+   In StdLib Coq this corresponds to well_founded *)
+Definition wf {X} (R : X → X → Prop) := ∀x, acc_i R x.
 
 Section transfinite_recursion.
 
@@ -292,14 +293,22 @@ Section transfinite_recursion.
             (R : X → X → Prop) (Rwf : wf R)
             (P : X → Type) (HP : ∀x, (∀y, R y x → P y) → P x).
 
-  Fact transfinite_recursion : ∀x, P x.
+  Fact transfinite_recursion_ltac : ∀x, P x.
   Proof.
     intros x; generalize (Rwf x).
     induction 1 as [ x IHx ] using acc_i_rect.
     apply HP, IHx.
   Qed.
 
+  Definition transfinite_recursion_code x : P x :=
+    acc_i_rect X R P HP x (Rwf x).
+
 End transfinite_recursion.
+
+Fact transfinite_recursion {X} {R : X → X → Prop} (Rwf : wf R) (P : X → Type) :
+        (∀x, (∀y, R y x → P y) → P x)
+       → ∀x,                     P x.
+Proof. apply transfinite_recursion_code, Rwf. Qed.
 
 Arguments transfinite_recursion {X R}.
 
@@ -338,7 +347,7 @@ Proof.
 Qed.
 
 (* The _ < _ : nat → nat → Prop relation if well founded *)
-Theorem lt_wf : wf (λ u v, u < v).
+Theorem lt_wf : wf (λ u v : nat, u < v).
 Proof. exact (λ n, lt_wf_rec _ _ (le_n n)). Qed.
 
 Section induction_on_a_measure.
@@ -351,17 +360,25 @@ Section induction_on_a_measure.
   Let R x y := m x < m y.
   Let Rwf : wf R.
   Proof. unfold R; apply wf_inverse_image, lt_wf. Qed.
+
+  Hypothesis HP : ∀x, (∀y, m y < m x → P y) → P x.
   
-  Fact measure_induction :
-        (∀x, (∀y, m y < m x → P y) → P x)
-       → ∀x,                         P x.
+  Fact measure_induction_ltac x : P x.
   Proof.
-    intros HP x.
     induction x as [ x IHx ] using (transfinite_recursion Rwf).
     apply HP, IHx.
   Qed.
 
+  Definition measure_induction_code : ∀ x, P x :=
+    transfinite_recursion Rwf P HP. 
+
 End induction_on_a_measure.
+
+Fact measure_induction X (m : X → nat) (P : X → Type) :
+        (∀x, (∀y, m y < m x → P y) → P x)
+       → ∀x,                         P x.
+Proof. apply measure_induction_code. Qed.
+
 
 
 
