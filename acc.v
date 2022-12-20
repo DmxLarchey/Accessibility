@@ -66,6 +66,15 @@ Section accessibility.
                     → (∀n, P n → P (S n)) 
                     → ∀n, P n
 
+     Notice that nat_rect states that nat is the smallest
+     type closed under the rules:
+
+                           n : nat
+           ---------     -----------
+            0 : nat       S n : nat
+
+     which are preciselly the constructors of nat.
+
      There are specialized versions for the sorts Set, Prop
      and SProp (instead of Type above), ie nat_rec, nat_ind 
      and nat_sind but nat_rect can always be used in place of 
