@@ -129,22 +129,24 @@ Section accessibility.
     Variables (P : X → Type)
               (Pclosed : ∀x, (∀y, y ≺ x → P y) → P x).
 
-    (* acc_i is smaller than P*)
+    (* acc_i is smaller than P because P is closed under
+       acc_i introduction rule *)
+
+    (* The two below proofs avoid using singleton elimination 
+       by delaying the analysing of ax until the context is
+       typed in Prop *)
     Fixpoint acc_i_rect_ltac x (ax : acc_i x) { struct ax } : P x.
     Proof.
-      destruct ax as [ hx ].
       apply Pclosed.
-      intros.
-      apply acc_i_rect_ltac, hx, H.
+      intros y hy.
+      apply acc_i_rect_ltac.
+      apply (acc_i_inv ax), hy.
     Qed.
 
     Fixpoint acc_i_rect_code x (ax : acc_i x) { struct ax } : P x :=
-      match ax with
-      | acc_i_intro _ hx => Pclosed _ (λ y hy, acc_i_rect_code y (hx y hy))
-      end.
+      Pclosed x (λ y hy, acc_i_rect_code y (acc_i_inv ax hy)).
 
-    (* The code are nearly the same upto eta-expansion in the tactic version,
-       caused by the destruct tactic *)
+    (* These are the same proof terms *)
     Print acc_i_rect_ltac.
     Print acc_i_rect_code.
 
@@ -160,7 +162,7 @@ Section accessibility.
   Definition acc_i_rect (P : X → Type) :
          (∀x, (∀y, y ≺ x → P y) → P x)
         → ∀x, acc_i x → P x.
-  Proof. exact (acc_i_rect_code P). Qed.
+  Proof. exact (acc_i_rect_code P). Defined.
 
   (* Because acc_i is the smallest predicate closed for its introduction rule,
      it is smaller than acc_c *)
@@ -234,7 +236,9 @@ Section accessibility.
       induction ax as [ x hx ihx ] using acc_i_drect.
       apply Pclosed, ihx.
     Qed.
-   
+
+    (* Notice that this proof *does not* use singleton elimination
+       because acc_i_inv is call while building a proof term in Prop *)
     Fixpoint acc_i_drect'_code x (ax : acc_i x) { struct ax } :  P x ax :=
       Pclosed x ax (λ y hy, acc_i_drect'_code y (acc_i_inv ax hy)).
 
@@ -259,11 +263,11 @@ Section accessibility.
         → ∀x (ax : acc_i x),                                            P x ax.
   Proof. exact (acc_i_drect'_code P). Qed.
 
-  Reserved Notation "x ~~ y" (at level 70, no associativity, format "x  ~~ y").
+  Reserved Notation "x ~~ y" (at level 70, no associativity, format "x  ~~  y").
   
   (* acc_i x proofs are not unique but they are all hereditarilly equivalent *)
   Inductive acc_i_equiv : ∀x, acc_i x → acc_i x → Type :=
-    | acc_i_equiv_intro x hx hx' : (∀y hy,  hx y hy ~~ hx' y hy) 
+    | acc_i_equiv_intro x hx hx' : (∀y hy1 hy2,  hx y hy1 ~~ hx' y hy2) 
                                  → acc_i_intro x hx ~~ acc_i_intro x hx'
   where "ax ~~ bx" := (acc_i_equiv _ ax bx).
 
@@ -274,6 +278,61 @@ Section accessibility.
     revert ax'; induction ax as [ x hx ihx ] using acc_i_drect; intros [ hx' ].
     constructor; simpl; trivial.
   Qed.
+
+  Section acc_i_rect_ext_gen.
+
+    (* We can use equivalence of accessibility proofs to show the
+       extensionality of acc_i_rect in a very generic form, ie
+       up to a parametric relation E *)
+
+    Variables (f : X → Type) (E : ∀{x}, f x → f x → Prop)
+              (Hf : ∀x, (∀y, y ≺ x → f y) → f x)
+              (EHf : ∀x g1 g2, (∀y (h1 h2 : y ≺ x), E (g1 y h1) (g2 y h2)) → E (Hf x g1) (Hf x g2)).
+
+    Fact acc_i_rect_ext_gen x (ax1 ax2 : acc_i x) : E (acc_i_rect f Hf x ax1) (acc_i_rect f Hf x ax2).
+    Proof.
+      unfold acc_i_rect.
+      generalize (acc_i_equiv_total _ ax1 ax2); revert x ax1 ax2.
+      refine (fix loop x ax1 ax2 ex { struct ex } := _).
+      destruct ex as [ x hx1 hx2 H ]; simpl.
+      apply EHf.
+      intros y hy1 hy2.
+      apply loop, H.
+    Qed.
+
+  End acc_i_rect_ext_gen.
+
+  Section acc_i_rect_ext_eq.
+
+    (* As a special case, E can be equality over f x *)
+
+    Variables (f : X → Type)
+              (Hf : ∀x, (∀y, y ≺ x → f y) → f x)
+              (EHf : ∀x g1 g2, (∀y (h1 h2 : y ≺ x), g1 y h1 = g2 y h2) → Hf x g1 = Hf x g2).
+
+    Fact acc_i_rect_ext_eq x (ax1 ax2 : acc_i x) : acc_i_rect f Hf x ax1 = acc_i_rect f Hf x ax2.
+    Proof. apply acc_i_rect_ext_gen with (E := λ x, @eq (f x)), EHf. Qed.
+
+  End acc_i_rect_ext_eq.
+
+  Section acc_i_rect_ext_iff.
+
+    (* As another case, E could be logical equivalence of a unary predicate,
+       typically useful when f is a semantic interpretation, eg of lambda terms *)
+
+    Variables (Y : X -> Type).
+
+    Let f (x : X) := Y x → Prop.
+
+    Let E : ∀{x}, f x → f x → Prop := λ x A B, ∀y, A y ↔ B y.
+
+    Variables (Hf : ∀x, (∀y, y ≺ x → f y) → f x)
+              (EHf : ∀x g1 g2, (∀y (h1 h2 : y ≺ x), E (g1 y h1) (g2 y h2)) → E (Hf x g1) (Hf x g2)).
+
+    Fact acc_i_rect_ext_iff x (ax1 ax2 : acc_i x) : E (acc_i_rect f Hf x ax1) (acc_i_rect f Hf x ax2).
+    Proof. apply acc_i_rect_ext_gen with (E := @E), EHf. Qed.
+
+  End acc_i_rect_ext_iff.
 
 End accessibility.
 
